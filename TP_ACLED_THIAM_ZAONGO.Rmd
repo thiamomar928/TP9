@@ -1,0 +1,712 @@
+---
+title:  \includegraphics[width=0.2\linewidth]{ensae}  \vspace{-0.2cm}
+subtitle:  \Large \textbf{Ecole nationale de la Statsitique et de l'Analyse économique } \vspace{-0.1cm}
+author: \Large \textbf{Année académique 2023-2024}
+header-includes:
+   #- \usepackage{xcolor}
+   - \usepackage{tocloft}
+   - \usepackage{tikz}
+   - \usepackage{wallpaper}
+   - \usepackage{lipsum}
+   - \usepackage{leading}
+   - \usepackage{fancyhdr}
+   - \usepackage{blindtext}
+   - \usepackage{amsmath}
+   - \usepackage{graphics}
+   - \DeclareMathOperator*{\argmax}{argmax}
+   - \DeclareMathOperator*{\argmin}{argmin}
+output: 
+  pdf_document: default
+      #toc: true
+      #toc_depth: 5
+      #number_sections: true
+      #fontsize: 14 pt
+      #geometry: margin=1in
+  html_document: default
+    #toc: true
+    #toc_depth: 5
+    #theme: united
+---
+
+```{=tex}
+\begingroup
+\color{blue}
+\begin{tikzpicture}[remember picture,overlay]
+    \draw[very thick]
+        ([yshift=-35pt,xshift=35pt]current page.north west)--
+        ([yshift=-35pt,xshift=-35pt]current page.north east)--
+        ([yshift=35pt,xshift=-35pt]current page.south east)--
+        ([yshift=35pt,xshift=35pt]current page.south west)--cycle;
+\end{tikzpicture}
+\endgroup
+```
+```{=tex}
+\vspace{-.2cm} 
+\begin{center}
+
+* * *
+
+\vspace{1.2cm} 
+
+\LARGE{\textbf{COURS DE STATISTIQUE SPATIALE}}
+
+
+\end{center}
+```
+```{=tex}
+\begingroup
+\color{blue}
+\begin{center}
+* * *
+
+\begingroup
+\LARGE \textbf{TRAVAUX PRATIQUES N°2}
+\endgroup
+
+* * *
+\end{center}
+\endgroup
+```
+\vspace{1cm}
+
+```{=tex}
+\begin{center}
+\large Réalisé par :  \textbf{Inoussa ZAONGO et Omar THIAM}
+\end{center}
+```
+```{=tex}
+\begin{center}
+\large Sous la supervision de :  \textbf{M. HEMA}
+\end{center}
+```
+```{=tex}
+\begin{center}
+\vspace{1cm}
+\large 21 Décembre 2023
+\vspace{1cm}
+\end{center}
+```
+```{=tex}
+\begin{center}
+Ce document a été généré directement depuis \textbf{RStudio} en utilisant l’outil \textbf{Markdown}. \\
+\vspace{0.5cm}
+\includegraphics[width=1\linewidth]{Rlogo}
+\hspace{1cm}
+\includegraphics[width=0.12\linewidth]{Rstudiologo}
+\end{center}
+```
+```{=tex}
+\thispagestyle{empty}
+\newpage
+```
+```{=tex}
+\setcounter{tocdepth}{4}                
+\renewcommand{\contentsname}{\textcolor{blue}{Sommaire}}
+```
+\textcolor{blue}{\tableofcontents} \newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+
+```
+
+
+```{r}
+library("raster")
+library("sf")
+library("dplyr")
+library("ggplot2")
+library("sp")
+#library("esquisse")
+library("readr")
+
+
+```
+
+
+
+
+
+
+
+# Importation et visualisation des données ACLED
+
+```{r}
+pass <- here::here() #chemin relatif
+pass_true <- paste0(pass,"/","ACLED-Western_Africa.csv") #Accés a notre base de données
+data<- readr::read_csv(pass_true) #Lecture de notre base de données
+
+dim(data)
+head(data)
+str(data)
+
+
+
+```
+
+
+
+
+## Ajouter des coordonnées spatiales à la base
+
+```{r}
+
+data_sp = data
+coordinates(data_sp) = ~longitude+latitude
+class(data_sp) # pour connaitre la classe
+
+#View(data_sp)
+
+```
+
+
+## Ajout de la projection
+
+```{r}
+
+
+# projection longlat
+proj4string(data_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs
++ellps=WGS84 +towgs84=0,0,0")
+
+
+#Pour connaitre le numero de projection wgs_84
+str(data_sp)
+proj4string(data_sp)
+
+```
+
+## Transformation de l'objet sp en sf
+
+
+```{r}
+data_sf = st_as_sf(data_sp, coords=c(longitude,latitude))
+class(data_sf)
+head(data_sf)
+
+```
+
+
+
+## Representation
+
+```{r}
+ggplot(data_sf) +
+  aes(fill = pays, colour = type) +
+  geom_sf(size = 1.2) +
+  scale_fill_hue(direction = 1) +
+  scale_color_hue(direction = 1) +
+  theme_minimal()
+
+```
+
+
+
+# Importation des shapefile des pays de l'Afrique
+
+```{r}
+pass_true <- paste0(pass,"/","Africa_Boundaries.shp") #Accés a notre base de données
+Afrique<- read_sf(pass_true) #Lecture de notre base de données
+
+```
+
+
+## Selectionner les limites des pays de ACLED dans le sf de l'Afrique
+
+```{r}
+
+library(dplyr)
+
+Pays_ACLED = filter(Afrique,NAME_0 %in% c("Burkina Faso","Côte d'Ivoire",
+                                          "Gambia","Ghana","Liberia","Niger",
+                                          "Sierra Leone","Togo","Mali","Nigeria",
+                                          "Mauritania","Senegal","Benin","Cape Verde" ,"Guinea","Guinea-Bissau"))
+
+
+```
+
+
+
+
+## Representation des pays et des evenements de ACLED
+
+```{r}
+
+
+library(ggplot2)
+
+graph <- ggplot() +
+  geom_sf(data = Pays_ACLED, aes(fill = NAME_0), color = "black", size = 0.5) +
+  geom_sf(data = data_sf, aes(fill = type), color = "red", size = 0.5) +
+  scale_fill_discrete(name = "NAME_0", limits = unique(Pays_ACLED$NAME_0))
+
+
+print(graph)
+
+```
+
+
+# I.Première partie
+
+# 1. Compter les évênements dans chaque pays
+
+
+
+
+
+```{r}
+#1.1 Calculer le nombre d'evenement par pays
+
+library(dplyr)
+nombre_evenement = data %>% 
+  group_by(pays) %>%
+  summarise("nombre_evenement" = n())
+
+print(nombre_evenement) 
+
+#1.2 Representation
+
+ggplot(nombre_evenement) +
+  aes(x = pays, y = nombre_evenement, fill = pays) +
+  geom_col() +
+  scale_fill_hue(direction = 1) +
+  theme_minimal()
+
+
+
+```
+
+# 2.Fixation d'un pays et Calcul des évênements
+
+## 2.1 Evênements par region
+
+Fixons comme pays le Burkina Faso et calcul les évênements par region
+
+Pour cela , nous allons faire venir le shape par region du Burkina Faso
+
+```{r}
+pass <- here::here() #chemin relatif
+pass_true <- paste0(pass,"/","gadm41_BFA_1.shp") #Accés a notre base de données
+BF<- read_sf(pass_true) #Lecture de notre base de données
+str(BF)
+
+```
+
+
+## Représentation
+
+```{r}
+#representation
+
+
+ggplot(BF) +
+  aes(fill = NAME_1) +
+  geom_sf(size = 1.2) +
+  scale_fill_hue(direction = 1) +
+  theme_minimal()
+
+
+
+
+```
+
+  
+
+# Extraction de la base Burkina dans la base Acled
+
+```{r}
+# extraction de la base Burkina dans la base Acled
+
+BF_ACLED = filter(data_sf,pays %in% ("Burkina Faso"))
+
+
+```
+
+
+Nous allons ensuite fusionner cette base qui contient les attaques avec avec la base BF qui contient le decoupage administratif pour avoir le nombre d'évênement.
+
+
+## Fusion de base BF et de base BF_ACLED
+
+
+```{r}
+New_data= st_join(BF_ACLED,BF)
+head(New_data)
+```
+
+
+
+
+```{r}
+#Calcul des événnements par region au burkina faso
+
+#AVec summarise
+
+evenement_BF = New_data %>%
+    group_by(NAME_1)%>%
+     summarise("evenement_region"=n())
+print(evenement_BF)
+
+#on voit qu'il y'a un une ligne qui est NA , on la supprimer
+evenement_BF1 <- subset(evenement_BF, !is.na(evenement_BF$NAME_1))
+print(evenement_BF1)
+
+
+
+```
+
+
+
+```{r}
+
+##avec mutate pour pouvoir representer l'object spatial et de l'utiliser après dans les raster
+
+evenement_BF_r = New_data %>%
+  group_by(NAME_1)%>%
+  mutate("evenement_region"=n())
+print(evenement_BF_r)
+
+#representation
+ggplot(evenement_BF1) +
+  aes(fill = NAME_1, colour = evenement_region) +
+  geom_sf(size = 1.2) +
+  scale_fill_hue(direction = 1) +
+  scale_color_gradient() +
+  theme_minimal()
+
+
+```
+
+
+
+## 2.2 Evênements par province
+
+
+```{r}
+pass <- here::here() #chemin relatif
+pass_true <- paste0(pass,"/","gadm41_BFA_2.shp") #Accés a notre base de données
+BF_provin<- read_sf(pass_true) #Lecture de notre base de données
+str(BF_provin)
+
+View(BF_provin)
+
+```
+
+
+## Fusion de base BF_provin et de base BF_ACLED
+```{r}
+base_provin= st_join(BF_ACLED,BF_provin)
+head(base_provin)
+
+
+```
+
+
+```{r}
+#Calcul des événnements par region au burkina faso
+
+#AVec summarise
+
+evenement_provin_BF = base_provin %>%
+    group_by(NAME_2)%>%
+     summarise("evenement_province"=n())
+print(evenement_provin_BF)
+
+
+```
+
+
+# II Deuxième partie
+
+## II.1.Créer un raster avec une résolution de 0.5m x 0.5 m 
+
+
+```{r}
+
+# prendre le BF 
+ r_crs <- CRS("+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
+r_ext <- extent(BF) # les bords 
+r_res <-  c(0.5,0.5) # resolution : 0.5 m
+rast_zero <- raster(crs=r_crs, ext=r_ext, resolution=r_res)
+st_crs(evenement_BF_r) <- r_crs
+
+evenement_BF_r <- st_transform(evenement_BF_r, crs = r_crs)
+
+BF_raster_reg <- rasterize(evenement_BF_r, rast_zero, field = "evenement_region", fun = "sum")
+
+
+str(evenement_BF_r)
+
+plot(BF_raster_reg)
+
+plot(BF_raster_reg, main = "Superposition Couche Raster et Couche Vecteur")
+
+# Plot la couche vecteur par-dessus la couche raster
+plot(BF, add = TRUE, col = "red", pch = 20)
+
+
+```
+
+
+
+
+## II.2.creer un autre raster qui categorise le nombre d'évênements
+
+### II.2.1 Categorisation du prof
+
+
+
+```{r}
+# Categorisation  des raster
+
+# Définir les ruptures pour la catégorisation
+#breaks <- c(0, 5, 10, Inf)
+
+breaks <- c(0, 5, 10, Inf)
+
+# Créer des catégories en fonction du nombre d'événements
+raster_categories <- cut(getValues(BF_raster_reg), breaks = breaks, labels = c(1, 2, 3), include.lowest = TRUE)
+
+# Créer une nouvelle couche raster avec les catégories
+BF_raster_categories <- BF_raster_reg  # Créer une copie de la couche raster
+values(BF_raster_categories) <- as.numeric(raster_categories)  # Définir les valeurs
+
+# Plot la nouvelle couche raster avec catégories
+plot(BF_raster_categories, main = "Raster avec Catégories")
+
+str(BF_raster_categories)
+
+
+# Plot les categories du raster
+plot(raster_categories, main = "categorie)")
+
+valeur = getValues(BF_raster_categories)
+print(valeur)
+
+```
+
+
+
+
+### II.2.1 Categorisation differente de celle du prof
+
+
+
+```{r}
+# Categorisation  des raster
+
+# Définir les ruptures pour la catégorisation
+#breaks <- c(0, 5, 10, Inf)
+
+breaks <- c(0, 1000, 2000, Inf)
+
+# Créer des catégories en fonction du nombre d'événements
+raster_categories <- cut(getValues(BF_raster_reg), breaks = breaks, labels = c(1, 2, 3), include.lowest = TRUE)
+
+# Créer une nouvelle couche raster avec les catégories
+BF_raster_categories <- BF_raster_reg  # Créer une copie de la couche raster
+values(BF_raster_categories) <- as.numeric(raster_categories)  # Définir les valeurs
+
+# Plot la nouvelle couche raster avec catégories
+plot(BF_raster_categories, main = "Raster avec Catégories")
+
+str(BF_raster_categories)
+
+
+# Plot the categorized raster
+plot(raster_categories, main = "Categorized Events (10 km x 10 km)")
+
+
+
+
+valeur = getValues(BF_raster_categories)
+print(valeur)
+
+```
+
+
+
+## II.3 BONUS
+
+Le bonus consiste à donner les limites du travail qui a été donné et autre
+
+### II.3.1 Resolution 10km*10km
+
+La projection mercator on a une resolution en mètre donc on peut convertir km en m.
+
+
+```{r,}
+library(raster)
+library(sf)
+
+# Définir la projection cartographique avec une résolution en mètres
+r_crs_bis <- CRS("+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
+
+# Obtenir l'extent du raster à partir de BF
+r_ext_bis <- extent(BF)
+
+# Définir une résolution de 10 km (10 000 mètres)
+r_res_bis <- c(10000, 10000)
+
+# Créer le raster avec la nouvelle résolution
+rast_zero_bis <- raster(crs = r_crs_bis, ext = r_ext_bis, resolution = r_res_bis)
+
+# Transformer les données du vecteur dans la projection cartographique
+evenement_BF_r <- st_transform(evenement_BF_r, crs = r_crs_bis)
+
+# Rasterize avec la nouvelle résolution
+BF_raster_reg1 <- rasterize(evenement_BF_r, rast_zero_bis, field = "evenement_region", fun = "sum")
+
+# Afficher le résultat
+plot(BF_raster_reg1, main = "resolution 10km")
+
+
+```
+
+
+Mais On remarque cette resolution est trop pour le Burkina , ce qui rend l'information vague . Dons dans la suite on va changé de resolution pour pouvoir rendre l'information lisible
+
+### II.3.2 Carte du G5_sahel
+
+Nous n'avons pas pu creer les raster pour les pays du G5 sahel du fait du volume des données
+
+
+```{r,eval=FALSE}
+# Créer un raster avec une résolution de 10 km x 10 km
+resolut <- 1  # en mètres
+
+G5_crs <- CRS("+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m")
+raster_layer <- raster(crs = G5_crs ,extent(Pays_ACLED), resolution = resolut)
+st_crs(New_base) <- G5_crs
+
+image(raster_layer)
+# Remplir le raster avec le nombre d'événements par cellule
+raster_count <- rasterize(New_base, raster_layer, field = "pays",fun=n())
+
+# Afficher les informations sur le raster créé
+print(raster_count)
+
+# Visualiser le raster
+plot(raster_count, main = "Nombre d'événements par cellule (10 km x 10 km)")
+
+
+#creer un autre raster qui categorise le nombre d'évênements
+
+# Assuming 'raster_count' is the raster layer with the number of events per cell
+
+# Define breaks for categorization
+breaks <- c(0, 5, 10, Inf)
+
+# Create categories based on the number of events
+raster_categories <- cut(getValues(raster_count), breaks = breaks, labels = c(1, 2, 3), include.lowest = TRUE)
+
+# Create a new raster layer with categories
+raster_categories <- raster_count
+values(raster_categories) <- raster_categories
+
+# Plot the categorized raster
+plot(raster_categories, main = "Categorized Events (10 km x 10 km)")
+
+
+
+
+
+```
+
+### II.3.3 Matrice de voisinage
+
+#### II.3.3.1 Sur les provinces du Burkina Faso
+
+
+```{r}
+#install.packages("spdep")
+
+# Charger les packages
+library(sf)
+library(spdep)
+
+
+# Créer la matrice de voisinage
+matrice_voisinage <- poly2nb(BF_provin, queen = TRUE)
+
+# Afficher la matrice de voisinage
+matrice_voisinage
+
+
+
+```
+
+
+
+
+
+
+
+```{r}
+burkina.spdf2 <- raster::getData("GADM", country = "burkina faso", level = 2)
+
+class(burkina.spdf2)
+View(burkina.spdf2)
+##Representation de la carte
+centre<-coordinates(burkina.spdf2)
+noms2<-burkina.spdf2$NAME_2
+w.nb2 <- poly2nb(burkina.spdf2,row.names = noms2,queen=TRUE)
+par(oma = c(0, 0, 0, 0), mar = c(0, 0, 1, 0))#defini les marge exterieur et interieur
+plot(burkina.spdf2)
+text(centre[,1],centre[,2],noms2,cex=.7)
+title("Provinces du Burkina")
+
+
+# les vosins
+
+par(oma = c(0, 0, 0, 0), mar = c(0, 0, 1, 0))
+plot(burkina.spdf2,border="grey", axes=T)
+text(centre[,1],centre[,2],noms2,cex=.7)
+plot(w.nb2,centre,add=T,col="blue")
+title("Matrice de voisinage des Provinces du BF")
+
+```
+
+
+
+#### II.3.3.1 Sur les departements du Senegal
+
+
+
+
+
+
+```{r}
+
+Senegal.spdf2 <- raster::getData("GADM", country = "senegal", level = 2)
+
+##Representation de la carte
+centre<-coordinates(Senegal.spdf2)
+noms2<-Senegal.spdf2$NAME_2
+w.nb2 <- poly2nb(Senegal.spdf2,row.names = noms2,queen=TRUE)
+par(oma = c(0, 0, 0, 0), mar = c(0, 0, 1, 0))
+plot(Senegal.spdf2)
+text(centre[,1],centre[,2],noms2,cex=.7)
+title("departement du senegal")
+
+print(w.nb2)
+
+```
+
+## Representation graphique de la matrice de voisinage du senegal
+
+```{r}
+# les vosins
+
+par(oma = c(0, 0, 0, 0), mar = c(0, 0, 1, 0))
+plot(Senegal.spdf2,border="grey", axes=T)
+text(centre[,1],centre[,2],noms2,cex=.7)
+plot(w.nb2,centre,add=T,col="blue")
+title("Matrice de voisinage des departements du Senegal")
+
+```
+
